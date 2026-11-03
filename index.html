@@ -159,7 +159,7 @@ input[type=number]{-moz-appearance:textfield;appearance:textfield}input::-webkit
 .dlg .acts{display:flex;gap:10px}
 
 .note{background:#251f4a;border:1px solid #3b3374;color:#d6d0ff;border-radius:12px;padding:10px 12px;font-size:13px;display:flex;gap:10px;align-items:center}
-.note button{color:var(--accent);font-weight:700;white-space:nowrap}
+.note button{background:var(--accent);color:var(--accent-ink);font-weight:700;white-space:nowrap;padding:8px 14px;border-radius:999px}
 .searchbox{display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:0 12px}
 .searchbox input{flex:1;min-width:0;background:none;border:0;outline:none;padding:12px 0}
 .mnav{display:flex;align-items:center;justify-content:space-between;gap:8px}
@@ -443,6 +443,8 @@ function vSettings(){return {top:header('備份與設定'),main:`<section class=
   <section class="card"><div class="ch">${ic('list')}<h2>類別</h2></div><p class="help" style="margin-top:0">新增類別在記帳表單點「＋」；長按不需要，點下方類別即可刪除（已使用的紀錄不受影響）。</p>
   ${['expense','income'].map(k=>`<div class="lab">${k==='expense'?'支出':'收入'}</div><div class="chips wrap">${S.cats[k].map(c=>`<button class="chip" data-act="delCat" data-arg="${k}|${esc(c)}">${esc(c)} <small>✕</small></button>`).join('')}</div>`).join('')}</section>
   <section class="card"><div class="ch">${ic('home')}<h2>安裝到手機</h2></div><div class="help" style="margin-top:0"><ol><li>用 Chrome（Android）或 Safari（iPhone）開啟這個記帳本的網址</li><li>Android：右上角 ⋮ →「加到主畫面／安裝應用程式」</li><li>iPhone：分享按鈕 →「加入主畫面」</li></ol>安裝後會以全螢幕 App 開啟，離線也能記帳。</div></section>
+  <section class="card"><div class="ch">${ic('list')}<h2>清空收支紀錄</h2></div><p class="help" style="margin-top:0">刪除所有收支紀錄（含範例資料），保留帳戶、信用卡結帳日、類別、預算、提醒和通知欄設定。</p>
+  <div style="display:flex;margin-top:10px"><button class="btn danger" style="flex:1" data-act="clearSample">清空收支紀錄…</button></div></section>
   <section class="card"><div class="ch"><h2>重設</h2></div><div style="display:flex;gap:10px;flex-wrap:wrap"><button class="btn danger" data-act="resetAll">刪除全部資料</button><button class="btn ghost" data-act="loadSample">載入範例資料</button></div></section>`,fab:false}}
 
 function notifNote(){if(!canNotify())return `<div class="note"><span style="flex:1">這裡是預覽版，瀏覽器不允許傳送通知。設定會保留，請用安裝到主畫面的版本開啟。</span></div>`;
@@ -568,8 +570,15 @@ const ACT={
     if(!await ask(n?`這個帳戶有 ${n} 筆紀錄，刪除帳戶會一併刪除這些紀錄。確定？`:'刪除這個帳戶？','刪除'))return;
     S.tx=S.tx.filter(t=>t.acc!==id&&t.toAcc!==id);S.schedules=S.schedules.filter(s=>s.tpl.acc!==id&&s.tpl.toAcc!==id);S.accounts=S.accounts.filter(a=>a.id!==id);save();closeAll();render();toast('帳戶已刪除')},
   saveBud(){S.budget=Math.max(0,parseFloat($('#budIn').value)||0);save();render();toast('預算已更新')},
-  async clearSample(){if(!await ask('清空所有收支紀錄與排程？帳戶名稱、結帳日與類別會保留，帳戶起始金額歸零。','清空'))return;
-    S.tx=[];S.schedules=[];S.accounts.forEach(a=>a.init=0);S.sample=false;save();render();toast('已清空，可以開始記帳了')},
+  clearSample(){closeAll();F={kind:'clear'};openSheet(`<div class="sh-h"><h3>清空收支紀錄</h3><button class="ib" data-act="closeAll" aria-label="關閉">${ic('x')}</button></div>
+    <div class="sh-b"><p class="help">會刪除全部 ${S.tx.length} 筆收支紀錄。帳戶、結帳日、類別、預算、提醒和通知欄設定都會保留。</p>
+    <label class="check"><input type="checkbox" id="clrInit" checked>帳戶起始金額全部歸零</label>
+    <p class="help" style="margin-top:0">不勾的話，各帳戶會保留目前設定的起始金額，之後可在帳戶的「⋯」修改。</p>
+    <label class="check"><input type="checkbox" id="clrSched" ${S.schedules.length?'checked':''}>一併刪除排程（目前 ${S.schedules.length} 個）</label>
+    <p class="help" style="margin-top:0">建議先到「備份與設定」匯出備份。清空後無法復原。</p></div>
+    <div class="sh-f"><button class="btn ghost" data-act="closeAll">取消</button><button class="btn danger" style="flex:1" data-act="doClear">確定清空</button></div>`)},
+  doClear(){const zi=$('#clrInit').checked,zs=$('#clrSched').checked;S.tx=[];if(zs)S.schedules=[];if(zi)S.accounts.forEach(a=>a.init=0);S.sample=false;S.lastEntryDay='';
+    save();closeAll();V.view='home';V.sel=today();window.scrollTo(0,0);render();toast('已清空，可以開始記帳了')},
   async resetAll(){if(!await ask('刪除全部帳戶、紀錄與設定？這個動作無法復原，建議先匯出備份。','全部刪除'))return;
     S={v:1,sample:false,accounts:[{id:uid(),name:'現金',type:'cash',init:0}],tx:[],cats:seed().cats,budget:30000,schedules:[]};norm();save();V.view='home';render();toast('已重設')},
   async loadSample(){if(!await ask('用範例資料取代目前所有資料？','載入',false))return;S=seed();norm();save();V.view='home';render()},
