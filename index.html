@@ -72,7 +72,7 @@ main{padding-block:14px 110px;padding-left:max(12px,env(safe-area-inset-left,0px
 .tx .r{text-align:right;flex:none}
 .tx .a{font-size:17px;font-weight:600}
 .tx .w{font-size:12px;color:var(--muted)}
-.tot{display:flex;justify-content:flex-end;gap:8px;align-items:baseline;border-top:1px solid var(--line);padding-top:10px;margin-top:2px;color:var(--muted)}
+.tot{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:4px 8px;align-items:baseline;border-top:1px solid var(--line);padding-top:10px;margin-top:2px;color:var(--muted)}
 .tot .num{font-size:18px}
 .empty{color:var(--muted);text-align:center;padding:22px 0 14px;font-size:14px}
 .dh{display:flex;justify-content:space-between;font-size:13px;color:var(--muted);padding:12px 0 2px;border-top:1px solid var(--line)}
@@ -343,6 +343,7 @@ function vHome(){
   const list=S.tx.filter(t=>t.date===V.sel).sort((a,b)=>(a.created||0)-(b.created||0));
   const tot=list.reduce((s,t)=>s+(t.type==='expense'?+t.amount:0),0);
   const inc=list.reduce((s,t)=>s+(t.type==='income'?+t.amount:0),0);
+  const real=list.reduce((s,t)=>s+(t.type==='expense'&&!t.noBudget?+t.amount:0),0);
   const ym=V.sel.slice(0,7),sp=monthSpent(ym),bud=+S.budget||0,pct=bud?sp/bud:0;
   const sum=type=>S.accounts.filter(a=>a.type===type).reduce((s,a)=>s+balance(a.id),0);
   const owed=S.accounts.filter(a=>a.type==='card').reduce((s,a)=>s+cardInfo(a).pending,0);
@@ -350,7 +351,7 @@ function vHome(){
   return {top:header(`${sel.getFullYear()}年${sel.getMonth()+1}月`,{right})+week,main:`${sampleNote()}
   <section class="card"><div class="ch">${ic('list')}<h2>日明細 · ${sel.getMonth()+1}/${sel.getDate()} 週${WK[sel.getDay()]}</h2></div>
     <div class="list">${list.length?list.map(t=>txRow(t)).join(''):'<div class="empty">這天還沒有紀錄，按右下角 + 新增</div>'}</div>
-    ${list.length?`<div class="tot">${inc?`收入 <span class="num inc">${money(inc)}</span>　`:''}支出 <span class="num exp">${money(tot)}</span></div>`:''}</section>
+    ${list.length?`<div class="tot">${inc?`收入 <span class="num inc">${money(inc)}</span>　`:''}支出 <span class="num exp">${money(tot)}</span>　實支出 <span class="num exp">${money(real)}</span></div>`:''}</section>
   <button class="card" style="text-align:left" data-act="go" data-arg="budget"><div class="ch">${ic('budget')}<h2>${+ym.slice(5)}月預算</h2><span class="muted">${ic('chev')}</span></div>
     <div class="bnum"><span class="num big">${money(sp)}</span><span class="muted">of ${money(bud)}</span><span style="margin-left:auto" class="num ${bud-sp<0?'exp':'inc'}">剩 ${money(bud-sp)}</span></div>
     <div class="meter"><i class="${pct>1?'over':pct>.85?'warn':''}" style="width:${Math.min(100,pct*100).toFixed(1)}%"></i></div></button>
@@ -385,8 +386,8 @@ function vSearch(){return {top:header('搜尋',{right:''}),main:`<div class="sea
 function renderSearch(){const q=V.q.trim().toLowerCase();const box=$('#sres');if(!box)return;
   if(!q){box.innerHTML='<div class="empty">輸入關鍵字搜尋所有紀錄</div>';return}
   const r=S.tx.filter(t=>[t.name,t.note,t.cat,accName(t.acc),t.toAcc?accName(t.toAcc):''].join(' ').toLowerCase().includes(q));
-  const sp=r.reduce((s,t)=>s+(t.type==='expense'?+t.amount:0),0);
-  box.innerHTML=`<div class="list">${grouped(r)}</div>${r.length?`<div class="tot">${r.length} 筆 · 支出 <span class="num exp">${money(sp)}</span></div>`:''}`}
+  const sp=r.reduce((s,t)=>s+(t.type==='expense'?+t.amount:0),0),real=r.reduce((s,t)=>s+(t.type==='expense'&&!t.noBudget?+t.amount:0),0);
+  box.innerHTML=`<div class="list">${grouped(r)}</div>${r.length?`<div class="tot">${r.length} 筆 · 支出 <span class="num exp">${money(sp)}</span> · 實支出 <span class="num exp">${money(real)}</span></div>`:''}`}
 
 function vBudget(){const now=today().slice(0,7);const rows=[];for(let i=0;i<6;i++){const d=pd(now+'-01');d.setMonth(d.getMonth()-i);rows.push(ymd(d).slice(0,7))}
   const bud=+S.budget||0;
@@ -405,13 +406,14 @@ function vStats(){const ym=V.sm,[y,m]=ym.split('-').map(Number),dim=new Date(y,m
   const mnav=`<div class="mnav"><button class="ib" data-act="sm" data-arg="-1" aria-label="上個月">${ic('left')}</button><b>${y} 年 ${m} 月</b><button class="ib" data-act="sm" data-arg="1" aria-label="下個月">${ic('chev')}</button></div>`;
   let body='';
   if(V.st==='both'){const months=[];for(let i=5;i>=0;i--){const d=new Date(y,m-1-i,1);months.push(ymd(d).slice(0,7))}
-    const data=months.map(k=>{let e=0,n=0;for(const t of S.tx)if(t.date.startsWith(k)){if(t.type==='expense')e+=+t.amount;if(t.type==='income')n+=+t.amount}return{k,e,n}});
+    const data=months.map(k=>{let e=0,n=0,r=0;for(const t of S.tx)if(t.date.startsWith(k)){if(t.type==='expense'){e+=+t.amount;if(!t.noBudget)r+=+t.amount}if(t.type==='income')n+=+t.amount}return{k,e,n,r}});
     const mx=Math.max(1,...data.flatMap(d=>[d.e,d.n]));const W=320,H=170,bot=150,top=14,bw=(W-20)/6;
     const bars=data.map((d,i)=>{const x=14+i*bw,hE=(bot-top)*d.e/mx,hN=(bot-top)*d.n/mx;
       return `<rect x="${x+bw*.15}" y="${bot-hN}" width="${bw*.32}" height="${hN}" rx="3" fill="var(--inc)"/><rect x="${x+bw*.5}" y="${bot-hE}" width="${bw*.32}" height="${hE}" rx="3" fill="var(--exp)"/><text x="${x+bw/2}" y="${bot+14}" text-anchor="middle">${+d.k.slice(5)}月</text>`}).join('');
     const cur=data[5];
     body=`<section class="card"><div class="grid4"><div class="mini"><small>本月收入</small><span class="num inc">${money(cur.n)}</span></div><div class="mini"><small>本月支出</small><span class="num exp">${money(cur.e)}</span></div></div>
-      <div class="kv" style="margin-top:8px"><span>結餘</span><span class="num ${cur.n-cur.e<0?'exp':'inc'}" style="font-size:18px">${money(cur.n-cur.e)}</span></div></section>
+      <div class="kv" style="margin-top:8px"><span>實支出 <span class="muted" style="font-size:12px">（不含不計預算）</span></span><span class="num exp" style="font-size:18px">${money(cur.r)}</span></div>
+      <div class="kv"><span>結餘</span><span class="num ${cur.n-cur.e<0?'exp':'inc'}" style="font-size:18px">${money(cur.n-cur.e)}</span></div></section>
       <section class="card"><div class="ch">${ic('chart')}<h2>近六個月收支</h2><span class="muted" style="font-size:12px"><span class="dot" style="display:inline-block;background:var(--inc)"></span> 收入　<span class="dot" style="display:inline-block;background:var(--exp)"></span> 支出</span></div>
       <svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="近六個月收支長條圖"><line x1="8" x2="${W-4}" y1="${bot}" y2="${bot}" stroke="var(--line)"/><line x1="8" x2="${W-4}" y1="${top}" y2="${top}" stroke="var(--line)" stroke-dasharray="3 4"/><text x="8" y="${top-4}">${money(mx)}</text>${bars}</svg></section>`;
   } else {
